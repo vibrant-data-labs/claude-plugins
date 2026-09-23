@@ -1,0 +1,6 @@
+{
+  "name": "vdl-climate-tracker",
+  "description": "Work through the US Climate Finance Tracker with Claude.",
+  "version": "1.0.0",
+  "author": { "name": "Vibrant Data Labs" }
+}

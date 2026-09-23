@@ -1,0 +1,12 @@
+{
+  "name": "vibrant-data-labs",
+  "owner": { "name": "Vibrant Data Labs", "url": "https://vibrantdatalabs.org" },
+  "plugins": [
+    {
+      "name": "vdl-climate-tracker",
+      "displayName": "VDL Climate Tracker",
+      "source": "./plugins/vdl-climate-tracker",
+      "description": "Work through the US Climate Finance Tracker with Claude: filters, tables, funder briefs, prospect lists."
+    }
+  ]
+}
