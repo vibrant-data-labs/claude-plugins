@@ -1,7 +1,7 @@
 # Field registry — usclimate (Climate Finance Tracker)
 
 What exists, what it means, and what it's called in the URL. Field ids here are what goes in
-`filter.<id>`, `xAttribute`, `colorBy`, and a `filterQuery` leaf's `"field"`.
+a `filterQuery` leaf's `"field"`, `filter.<id>`, `xAttribute`, and `colorBy`.
 
 Universe: ~18,500 organizations, ~$993B tracked funding, 2010–2026, ~20,900 funders. **On a
 default load you see ~13,300** — the two pre-selected baseline filters
@@ -38,7 +38,7 @@ One Earth: 5 pillars → 17 sub-pillars → ~119 solutions. Drawdown: 13 sectors
 | `funder_names` | Funders | ~20,900 funder names. Filterable, **not** plottable. | org (array) |
 
 Taxonomy filters are surfaced as the **One Earth** and **Drawdown** accordions in the
-sidebar, not as flat dropdowns — but they write the same `filter.<id>` keys. Each accordion
+sidebar, not as flat dropdowns — but they filter on the same field ids. Each accordion
 header carries `Include <Framework>` / `Exclude <Framework>` buttons, and a pillar's header
 checkbox writes the pillar-level key independently of the sub-pillar boxes under it.
 
