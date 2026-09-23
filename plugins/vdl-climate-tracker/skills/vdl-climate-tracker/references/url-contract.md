@@ -4,11 +4,12 @@ Everything in the Data Explorer is URL-addressable, so navigating to a fully-bui
 the fast, reliable way to set up a view. There is **no share button** — the address bar is
 the share mechanism.
 
-Base: `https://usclimate.vibrantdatalabs.org/` (other tenants in `tenants.md`).
+Base: `https://usclimate.vibrantdatalabs.org/` (the US Climate Finance Tracker).
 
 ## Contents
 
 - [Chart and query parameters](#chart-and-query-parameters)
+- [Admin-only views](#admin-only-views)
 - [Simple filters](#simple-filters)
 - [Advanced filters — `filterQuery`](#advanced-filters--filterquery)
 - [Chart contributions — `contributionScope`](#chart-contributions--contributionscope)
@@ -34,6 +35,7 @@ Base: `https://usclimate.vibrantdatalabs.org/` (other tenants in `tenants.md`).
 | `chartView` | which view | absent = bar chart; `heatmap`, `scatter`, `table`, `map` |
 | `barMode` | bar stacking | `stacked` (default) \| `grouped` |
 | `barLayout` | bar orientation | `vertical` (default) \| `horizontal` |
+| `table` | tables section mode | absent = Side by side; `orgs`, `funders`, `side` |
 | `view` | active saved view slug | slug |
 | `schema` | override the serving schema | `config.schema` or a listed schema choice |
 
@@ -46,30 +48,58 @@ Defaults on a bare load: `xAttribute=pillars`, `colorBy=pillars`,
 saved views present auto-applies view 0 — **pass `xAttribute` explicitly** if you want true
 defaults.
 
-`chartView=heatmap` and `chartView=scatter` are admin-gated; a non-admin link silently falls
-back to the bar chart.
+## Admin-only views
+
+Some views and controls need an admin account on the tracker. Only build links that depend
+on them when the user has said they're an admin.
+
+| Feature | Non-admin opening a link that uses it |
+|---|---|
+| Heatmap (`chartView=heatmap`), Scatter (`chartView=scatter`) | **Silently falls back to the bar chart.** Nothing on screen says so. |
+| Advanced filters editor | The `filterQuery` in the link still applies and the chart renders, but they can't open the editor; a query Simple can't show locks the sidebar (see below). |
+| Advanced chart options (`contributionScope`) | The scope still applies; the `Chart contributions: …` caption says which. They can't change it. |
+| Advanced Measure builder (`share`, subset readings of `yShow`, scatter axes) | The reading still renders, captioned under the chart; they only get the everyday Metric and Show as menus. |
+
+If a feature you expect isn't on screen, check the role gate before assuming the app is
+broken.
 
 ## Simple filters
 
 `filter.<field id>`, repeatable. Values within one key OR; different keys AND.
+`filterExclude.<field id>` is the same for the sidebar's **Exclude** mode.
 
 ```
 ?xAttribute=solutions&filter.pillars=Energy+Transition&filter.org_type=Non+Profit
 ```
 
-`filterExclude.<field id>` is honored server-side but nothing in the simple UI writes it.
+This is the easy form to **write**, but it is not what the app keeps: on load the tracker
+converts `filter.*` / `filterExclude.*` into the equivalent `filterQuery` (below) and
+replaces the URL, and every sidebar edit writes `filterQuery` too. So build links with
+`filter.*` if you like, but the link you **share** is the address-bar URL after the page has
+loaded.
 
 Two filters are pre-selected on every load and are easy to change by accident:
-`filter.operating_status=active` and `filter.in_final_network=true`. Say which baseline a
-number uses.
+Operating Status = `active` and CFT Organization (`in_final_network`) = `true`. A `filter.*`
+link that doesn't mention them gets them added on load; a `filterQuery` link does **not**
+(see below). Say which baseline a number uses.
 
 Event-level filters (`vdl_stage`, `investment_type`, `funding_year`) only appear in the
 sidebar when `xAttribute=funding_year`, but they **keep filtering while hidden**.
 
 ## Advanced filters — `filterQuery`
 
-Admin-only, and enabled on the `vibrant-data-labs` (usclimate) and `learning` tenants only.
-Button label **`Advanced filters`** in the sidebar, above the simple filter list.
+The canonical filter format: the sidebar writes it for everyone, and a `filterQuery` link
+works for everyone. Only the **editor** for expressions the sidebar can't build (OR groups,
+nesting) is admin-only — button label **`Advanced filters`** in the sidebar, above the
+simple filter list.
+
+**A `filterQuery` link carries no defaults.** The baseline Operating Status = active and CFT
+Organization = true are added only to links without `filterQuery`. To keep the baseline in a
+hand-built query, include both leaves
+(`{"field":"operating_status","op":"has_any","values":["active"]}`,
+`{"field":"in_final_network","op":"has_any","values":["true"]}`) — `build_url.py` adds
+them unless you pass `--no-baseline`. Leaving them out widens the view to the whole tracked
+universe (~18.5k orgs instead of ~13.3k).
 
 One param, `filterQuery`, holding **plain JSON** (then ordinary URL encoding — no base64):
 
@@ -121,6 +151,7 @@ Clearing everything writes the explicit null query, not an absent param:
   opacity with the notice "Simple filters unavailable"; only Clear all still works.
   Representable = a top-level AND of leaves, at most one positive clause per field.
   So `{"any":[{pillars…},{pillars…}]}` locks it; the merged single-leaf form does not.
+  A non-admin can't open the editor either, so for them such a link is read-only.
 - Limits: nesting depth 8 (UI caps "Add group" at 6), 128 nodes, 500 values per leaf, 25
   keywords per leaf, keywords 3–100 chars, 64 KiB total, **8000 chars encoded URL**. Over
   the URL limit you get "This selection is too large for a shared URL" and nothing changes.
@@ -131,7 +162,8 @@ Clearing everything writes the explicit null query, not an absent param:
 `matching` (default) or `all`. Governs which taxonomy assignments a qualifying organization
 contributes to the chart: only the assignments that *explain* the match, or all of its
 assignments. Admin dialog **`Advanced chart options`**; the meaning is always visible as the
-caption `Chart contributions: …`. It changes bar composition only — never table eligibility,
+caption `Chart contributions: …`, and a link carrying `contributionScope=all` applies it for
+any viewer. It changes bar composition only — never table eligibility,
 never Distributed vs Full.
 
 ## Selections (`sel.*`)
@@ -147,9 +179,10 @@ Split by drops selections whose field no longer matches.
 
 ## What is NOT in the URL
 
-Lost on share or reload: the map's Country/State/County granularity, the tables section's
-Side by side / Organizations / Funders toggle, table sort, table search, table page, and
-column visibility/order/widths (those live in that browser's `localStorage`).
+Lost on share or reload: the map's Country/State/County granularity, table sort, table
+search, table page, and column visibility/order/widths (those live in that browser's
+`localStorage`). The Side by side / Organizations / Funders toggle *is* in the URL
+(`table=`).
 
 So a link can carry the data state but not the attention state — **say in prose where to
 look**.
@@ -163,14 +196,15 @@ When you do have to click rather than navigate, these are the literal strings.
 filters`) · framework accordions `One Earth` and `Drawdown`, each with **`Include One
 Earth`** / **`Exclude One Earth`** buttons in the header · pillar checkboxes named
 `<Pillar> Pillar` (e.g. `Energy Transition Pillar`) with `Select all` / `None` /
-`Find option…` and `Expand <sub-pillar>` buttons down to solutions · flat filter triggers
+`Find option…` and `Expand <sub-pillar>` buttons down to solutions · per-filter
+`Include` / `Exclude` mode buttons · flat filter triggers
 read `<Label>: All` or `<Label>: N selected` (e.g. `Organization Type: All`) · keyword input
 `Add keyword, press Enter`.
 
 **Chart toolbar** (labels are upper-case on screen): `MEASURE` · `Metric` · `Show as` ·
 `ALLOCATION` (Distributed | Full) · `Chart contributions: …` · `Advanced chart options` ·
 `GROUPING` · `Group by` · `Split by` · `"NO MATCH"` (Hide | Show) · view switcher
-`Chart | Heatmap | Scatter | Table | Map` · `Views ⌄` · `Save view`.
+`Chart | Heatmap | Scatter | Table | Map` (Heatmap and Scatter only for admins) · `Views ⌄`.
 
 **Advanced filter dialog**: title `Advanced filters` · legend `Find organizations matching` ·
 `All of these conditions (AND)` / `Any of these conditions (OR)` · `Add condition` ·
@@ -191,8 +225,8 @@ to that filter key; choosing an organization navigates away to `/organization/<u
    URL instead.
 3. Touching any filter **deletes `view`**, silently dropping you off a saved view.
 4. `County` as an axis is capped at **top 30**; the Table view and county map show all ~1,400.
-5. Keywords: minimum 3 characters, maximum 25 terms — out-of-bounds terms are silently
-   dropped, including from a hand-made URL.
+5. Keywords: 3–100 characters each, at most 25 terms. A hand-made URL outside those bounds
+   is rejected with an error, not silently trimmed.
 6. `% of all …` readings are unavailable under `Allocation = Full`.
 7. CSV exports **visible columns only, raw unformatted values**, and reflects table-level
    search and column filters. Side-by-side mode shows only 3–4 columns.

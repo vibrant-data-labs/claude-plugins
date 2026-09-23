@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Build a VDL tracker Data Explorer URL from a compact spec.
+"""Build a US Climate Finance Tracker Data Explorer URL from a compact spec.
 
-Handles the two things that are easy to get wrong by hand: repeatable ``filter.<key>``
-params, and the JSON encoding of an advanced ``filterQuery``.
+Handles the things that are easy to get wrong by hand: repeatable ``filter.<key>``
+params, the JSON encoding of an advanced ``filterQuery``, and keeping the default
+baseline (Operating Status = active, CFT Organization = true) in a ``filterQuery``.
+
+``--filter`` / ``--exclude`` emit ``filter.*`` / ``filterExclude.*``. The tracker converts
+those to ``filterQuery`` on load and adds the baseline defaults, so share the address-bar
+URL after the page has loaded, not this one.
 
 Examples
 --------
@@ -15,7 +20,8 @@ Map view of a cohort::
 
     python3 build_url.py --view map --filter drawdown_sectors=Electricity
 
-Advanced filter (admin only) — pass the expression as JSON::
+Advanced filter — pass the expression as JSON (the baseline leaves are added for you
+unless the expression already mentions those fields, or you pass --no-baseline)::
 
     python3 build_url.py --x pillars --query '{"all":[
         {"field":"pillars","op":"has_any","values":["Energy Transition","Nature Conservation"]},
@@ -40,13 +46,17 @@ from urllib.parse import urlencode
 
 TENANTS = {
     "usclimate": "https://usclimate.vibrantdatalabs.org/",
-    "demo": "https://demo.vibrantdatalabs.org/",
-    "lft": "https://lft.vibrantdatalabs.org/",
-    "drawdown": "https://drawdown.vibrantdatalabs.org/",
-    "natureloc": "https://natureloc.climatefinancetracker.com/",
-    "oneearth": "https://oneearth.climatefinancetracker.com/",
-    "healthinnovations": "https://healthinnovations.vibrantdatalabs.org/",
 }
+
+# The sidebar's default filters. A filter.* URL gets them on load; a filterQuery URL
+# does not, so they are written into the query explicitly.
+BASELINE = [
+    {"field": "operating_status", "op": "has_any", "values": ["active"]},
+    {"field": "in_final_network", "op": "has_any", "values": ["true"]},
+]
+
+# Free-text fields take contains_any / contains_none instead of has_any / has_none.
+KEYWORD_FIELDS = {"keyword"}
 
 MAX_URL_QUERY = 8000  # the app refuses a longer filterQuery-bearing link
 
@@ -59,6 +69,28 @@ def kv(pairs, what):
         key, value = raw.split("=", 1)
         out.append((key.strip(), value))
     return out
+
+
+def fields_in(expr) -> set[str]:
+    if isinstance(expr, dict):
+        if "field" in expr:
+            return {expr["field"]}
+        return set().union(*(fields_in(e) for e in expr.get("all", expr.get("any", []))))
+    return set()
+
+
+def with_baseline(where):
+    missing = [leaf for leaf in BASELINE if leaf["field"] not in fields_in(where)]
+    if not missing:
+        return where
+    if where is None:
+        parts = []
+    elif isinstance(where, dict) and "all" in where:
+        parts = list(where["all"])
+    else:
+        parts = [where]
+    parts += missing
+    return parts[0] if len(parts) == 1 else {"all": parts}
 
 
 def main() -> None:
@@ -78,7 +110,8 @@ def main() -> None:
                    help="how the measure is read; omit for a plain amount")
     p.add_argument("--view", dest="chart_view",
                    choices=["chart", "heatmap", "scatter", "table", "map"],
-                   help="'chart' is the default and emits no param")
+                   help="'chart' is the default and emits no param; heatmap and "
+                        "scatter need an admin account")
     p.add_argument("--allocation", choices=["distributed", "full"],
                    help="default distributed")
     p.add_argument("--no-match", dest="show_no_match", action="store_true",
@@ -88,18 +121,24 @@ def main() -> None:
     p.add_argument("--bar-mode", choices=["stacked", "grouped"])
     p.add_argument("--bar-layout", choices=["vertical", "horizontal"])
     p.add_argument("--contribution-scope", choices=["matching", "all"])
+    p.add_argument("--table", dest="tables_view", choices=["side", "orgs", "funders"],
+                   help="tables section mode; 'side' (Side by side) is the default")
     p.add_argument("--schema")
 
     p.add_argument("--filter", action="append", metavar="FIELD=VALUE",
                    help="simple filter; repeat for more values or more fields")
     p.add_argument("--exclude", action="append", metavar="FIELD=VALUE",
-                   help="filterExclude.<field>; honored server-side, no UI writes it")
+                   help="filterExclude.<field>, the sidebar's Exclude mode")
 
     p.add_argument("--query", help="advanced filter: the 'where' expression as JSON")
     p.add_argument("--any", dest="has_any", action="append",
-                   metavar="FIELD=V1,V2", help="shorthand has_any clause (ANDed)")
+                   metavar="FIELD=V1,V2",
+                   help="shorthand has_any clause (contains_any for keyword; ANDed)")
     p.add_argument("--none", dest="has_none", action="append",
                    metavar="FIELD=V1,V2", help="shorthand has_none clause (ANDed)")
+    p.add_argument("--no-baseline", action="store_true",
+                   help="don't add the default Operating Status / CFT Organization "
+                        "leaves to a filterQuery")
 
     args = p.parse_args()
 
@@ -128,6 +167,7 @@ def main() -> None:
     add("barMode", args.bar_mode)
     add("barLayout", args.bar_layout)
     add("contributionScope", args.contribution_scope)
+    add("table", args.tables_view)
     add("schema", args.schema)
 
     for field, value in kv(args.filter, "filter"):
@@ -141,6 +181,8 @@ def main() -> None:
                 where = json.loads(args.query)
             except json.JSONDecodeError as exc:
                 sys.exit(f"--query is not valid JSON: {exc}")
+            if isinstance(where, dict) and "where" in where:
+                where = where["where"]  # a whole {"version":1,"where":…} was passed
         else:
             clauses = []
             for op, pairs in (("has_any", args.has_any), ("has_none", args.has_none)):
@@ -148,8 +190,11 @@ def main() -> None:
                     values = sorted({v.strip() for v in value.split(",") if v.strip()})
                     if not values:
                         sys.exit(f"clause {field!r} has no values")
-                    clauses.append({"field": field, "op": op, "values": values})
+                    leaf_op = op.replace("has_", "contains_") if field in KEYWORD_FIELDS else op
+                    clauses.append({"field": field, "op": leaf_op, "values": values})
             where = clauses[0] if len(clauses) == 1 else {"all": clauses}
+        if not args.no_baseline:
+            where = with_baseline(where)
         params.append(("filterQuery",
                        json.dumps({"version": 1, "where": where},
                                   separators=(",", ":"))))

@@ -1,9 +1,7 @@
 # Reading the data without getting it wrong
 
-Adapted from the CFT copilot context doc (`app/vibrant-data-labs/copilot-context.md`), which
-is maintained in the repo. Every rule here exists because its absence produced a wrong or
-misleading answer in testing. Where the two disagree, the repo file wins — it's the living
-version.
+Every rule here exists because its absence produced a wrong or misleading answer in
+testing.
 
 ## The mechanics that change what a number means
 
@@ -171,8 +169,9 @@ Reconcile: a sub-pillar total must equal its solutions plus the residual.
   fit, open programs, future priorities). Never rank targets by predicted receptivity, and
   never give investment advice.
 - **Verify claims about the app's own behavior.** What the search box covers, what a toggle
-  does, what a column means — check the code or docs, or hedge it as unverified. Inferring
-  product behavior from placeholder text produced a wrong claim in testing.
+  does, what a column means — check it in the app (filter descriptions, captions), or hedge
+  it as unverified. Inferring product behavior from placeholder text produced a wrong claim
+  in testing.
 
 ## Known expressibility limits — don't pretend otherwise
 
